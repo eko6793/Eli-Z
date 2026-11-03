@@ -804,6 +804,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
       <label>IBAN<input id="s-iban" class="mono" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
       <div class="sstat" id="s-ibanstate"></div>
     </div>
+    <details class="hint"><summary>Erkannten Text anzeigen (zur Fehlersuche)</summary><pre id="s-rohtext" style="white-space:pre-wrap;font-size:12px"></pre></details>
     <button class="btn" id="scanok" type="button">In das Formular übernehmen</button>
     <input type="file" accept="image/*" capture="environment" id="f-cam" hidden>
     <input type="file" accept="image/*" id="f-lib" hidden>
@@ -832,7 +833,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     return createImageBitmap(file,{imageOrientation:"from-image"}).then(function(bm){
       var sy=0,sh=bm.height;if(opt.untenAnteil){sy=Math.round(bm.height*(1-opt.untenAnteil));sh=bm.height-sy}
       var max=opt.max||2200,sc=Math.min(1,max/Math.max(bm.width,sh));
-      if(opt.minBreite&&bm.width*sc<opt.minBreite)sc=opt.minBreite/bm.width;
+      var mb=opt.minBreite||1500;if(bm.width*sc<mb)sc=mb/bm.width;
       var c=document.createElement("canvas");c.width=Math.round(bm.width*sc);c.height=Math.round(sh*sc);
       var x=c.getContext("2d",{willReadFrequently:true});x.drawImage(bm,0,sy,bm.width,sh,0,0,c.width,c.height);if(bm.close)bm.close();
       var d=x.getImageData(0,0,c.width,c.height),p=d.data,h=new Uint32Array(256),i,g;
@@ -842,7 +843,8 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
       if(hi-lo<30){lo=0;hi=255}
       for(i=0;i<p.length;i+=4){g=(p[i]-lo)*255/(hi-lo);g=g<0?0:g>255?255:g;if(opt.invert)g=255-g;p[i]=p[i+1]=p[i+2]=g;p[i+3]=255}
       x.putImageData(d,0,0);return c})}
-  function lesen(w,canvas){return w.recognize(canvas).then(function(r){return r.data.text||""})}
+  window.__scanRaw=[];
+  function lesen(w,canvas){return w.recognize(canvas).then(function(r){var t=r.data.text||"";window.__scanRaw.push(t);var e=$("s-rohtext");if(e)e.textContent+=(e.textContent?"\n------\n":"")+t;return t})}
 
   // Hilfen
   function tc(s){s=s.toLowerCase().replace(/(^|[\s\-'\/])(\p{L})/gu,function(m,a,b){return a+b.toUpperCase()});
@@ -852,25 +854,38 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
   var LABEL=/(nachname|surname|vornamen|given|geburtstag|birth|geburtsort|staatsang|nationality|g[uü]ltig|expiry|unterschrift|signature|ausweis|identity|personalausweis|bundesrepublik|karte|card|gr[oö](ß|ss)e|height|augenfarbe|colour|eyes|anschrift|address|residence|geburtsname|name at|can|zugangs)/i;
   function wert(l,idx){ // Wert hinter dem Beschriftungstext: nächste Zeile mit genug Buchstaben
     for(var i=idx+1;i<Math.min(l.length,idx+4);i++){var v=sauber(l[i]);if(v.replace(/[^\p{L}]/gu,"").length>=2&&!LABEL.test(v))return v}return ""}
-  function ausweisVorne(t){var l=zeilen(t),r={nachname:"",vorname:""},i;
-    for(i=0;i<l.length;i++){
-      if(!r.nachname&&/nachname|surname/i.test(l[i])&&!/geburtsname/i.test(l[i]))r.nachname=wert(l,i);
-      if(!r.vorname&&/vornamen|given\s*names/i.test(l[i]))r.vorname=wert(l,i)}
+  function saeubern(v){var t=v.replace(/[^\p{L}\s\-']/gu," ").replace(/\s+/g," ").trim().split(" ");
+    while(t.length>1&&t[0].length<2)t.shift();while(t.length>1&&t[t.length-1].length<=2)t.pop();return t.join(" ")}
+  var NOLAB=/\/|nachname|surname|geburtsname|name at birth/i;
+  function ausweisVorne(t){var l=zeilen(t),r={nachname:"",vorname:""},iv=-1,i;
+    for(i=0;i<l.length;i++){if(/vornamen|given\s*names|pr[eé]noms/i.test(l[i])){iv=i;break}}
+    if(iv>-1){r.vorname=saeubern(wert(l,iv));
+      var c=[];for(i=iv-1;i>=Math.max(0,iv-5);i--){
+        if(/personalausweis|identity\s*card|bundesrepublik/i.test(l[i]))break;
+        if(NOLAB.test(l[i]))continue;
+        if(/[A-ZÄÖÜ]{4,}/.test(l[i].replace(/\s/g,"")))c.unshift(l[i])}
+      if(c.length)r.nachname=saeubern(c[0])}
+    if(!r.nachname){for(i=0;i<l.length;i++){if(/nachname|surname/i.test(l[i])&&!/geburtsname/i.test(l[i])){r.nachname=saeubern(wert(l,i));break}}}
     r.nachname=tc(r.nachname);r.vorname=tc(r.vorname);return r}
   function strasseFix(s){s=tc(s).replace(/([a-zäöüß])strasse\b/g,"$1straße").replace(/\bStrasse\b/g,"Straße");
     return s.replace(/(\d+)\s?([A-Za-z])$/,function(m,a,b){return a+" "+b.toLowerCase()})}
-  function ausweisHinten(t){var l=zeilen(t),r={strasse:"",plz:"",ort:""},i,m;
-    for(i=0;i<l.length;i++){m=l[i].match(/^\D{0,2}(\d{5})\s+([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß.\-\/ ]{1,40})$/);
-      if(m){r.plz=m[1];r.ort=tc(sauber(m[2]));
-        for(var j=i-1;j>=Math.max(0,i-2);j--){var v=l[j].replace(/[|_\[\]{}]/g," ").replace(/\s+/g," ").trim();
-          if(/[A-Za-zÄÖÜäöüß]{3,}/.test(v)&&/\d/.test(v)&&!/anschrift|address|residence/i.test(v)){r.strasse=strasseFix(v);break}}
-        if(!r.strasse){for(j=i-1;j>=Math.max(0,i-2);j--){v=l[j].trim();if(/[A-Za-zÄÖÜäöüß]{4,}/.test(v)&&!LABEL.test(v)){r.strasse=strasseFix(v);break}}}
-        break}}
+  function ausweisHinten(t){var l=zeilen(t),r={strasse:"",plz:"",ort:""},ip=-1,i,m;
+    for(i=0;i<l.length;i++){m=l[i].match(/(?:^|[\s|\[\(])(\d{5})\s+([A-Za-zÄÖÜäöüß][^\d]{1,40})$/);
+      if(m&&!/\d{6,}/.test(l[i])){ip=i;r.plz=m[1];r.ort=tc(saeubern(m[2]));break}}
+    if(ip>-1){var reihe=[],j;for(j=ip+1;j<=ip+3;j++)reihe.push(j);for(j=ip-1;j>=ip-2;j--)reihe.push(j);
+      for(var k=0;k<reihe.length;k++){j=reihe[k];if(j<0||j>=l.length)continue;
+        var tk=l[j].replace(/[|_\[\]{}<>]/g," ").replace(/\s+/g," ").trim().split(" "),last=tk.pop();
+        tk=tk.filter(function(x){return x.length>1&&!/\d/.test(x)&&!/^cm$/i.test(x)});tk.push(last);var v=tk.join(" ");
+        m=v.match(/((?:[A-Za-zÄÖÜäöüß.\-]+ ){0,3}[A-Za-zÄÖÜäöüß.\-]{3,}) (\d{1,4}\s?[A-Za-z]?)$/);
+        if(m&&!/anschrift|address|adresse|cm$/i.test(m[1])){r.strasse=strasseFix(m[1]+" "+m[2]);break}}}
     return r}
   function ersetzeUmlaute(s){return s.toUpperCase().replace(/Ä/g,"AE").replace(/Ö/g,"OE").replace(/Ü/g,"UE").replace(/ß/g,"SS").replace(/[^A-Z]/g,"")}
   function mrzName(t){ // dritte Zeile der Maschinenzeile: NACHNAME<<VORNAME
     var l=zeilen(t).map(function(x){return x.replace(/\s+/g,"").toUpperCase()}),best=null,i;
-    for(i=0;i<l.length;i++){if(/^[A-Z]{2,}<<[A-Z]{2,}/.test(l[i])&&l[i].length>=18){best=l[i]}}
+    for(i=0;i<l.length;i++){var x=l[i];
+      if(/^IDD</.test(x)||/\d/.test(x)||!/^[A-Z<]+$/.test(x)||x.length<14||x.length>40)continue;
+      if(!/^[A-Z]{2,}(<[A-Z]+)*<<[A-Z]{2,}/.test(x))continue;
+      if(!best||Math.abs(x.length-30)<Math.abs(best.length-30))best=x}
     if(!best)return null;var p=best.split("<<");return{nachname:p[0].replace(/</g," ").trim(),vorname:(p[1]||"").replace(/</g," ").trim()}}
   var KONF={O:"0",Q:"0",D:"0",I:"1",L:"1",S:"5",B:"8",Z:"2",G:"6",T:"7"},UMG={"0":"OQD","1":"ILT","5":"S","8":"B","2":"Z","6":"G","7":"T"};
   function ibanSuche(t){var s=t.toUpperCase().replace(/[^A-Z0-9]/g,""),start=-1,gef=[];
@@ -891,18 +906,13 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     return loadLib().then(function(){
       if(schritt==="vorne")return bild(file).then(function(c){return worker("deu").then(function(w){w1=w;return lesen(w,c)})}).then(function(t){
         var r=ausweisVorne(t);if(r.nachname)$("s-nachname").value=r.nachname;if(r.vorname)$("s-vorname").value=r.vorname;
-        status(sid,r.nachname||r.vorname?"Gelesen. Bitte Name und Vorname prüfen.":"Nichts erkannt. Nochmal mit besserem Licht, gerade und ohne Spiegelung fotografieren oder von Hand eintragen.",r.nachname?"ok":"bad")});
+        status(sid,r.nachname||r.vorname?"Gelesen. Bitte Name und Vorname prüfen.":"Nichts erkannt. Nochmal mit besserem Licht, gerade und ohne Spiegelung fotografieren oder von Hand eintragen.",r.nachname?"ok":"bad");pruefeMrz()});
       if(schritt==="hinten")return bild(file).then(function(c){return worker("deu").then(function(w){w1=w;return lesen(w,c)})}).then(function(t){
         var r=ausweisHinten(t);if(r.strasse)$("s-strasse").value=r.strasse;if(r.plz)$("s-plz").value=r.plz;if(r.ort)$("s-ort").value=r.ort;
-        status(sid,r.plz?"Anschrift gelesen. Bitte genau prüfen.":"Anschrift nicht erkannt. Nochmal fotografieren oder von Hand eintragen.",r.plz?"ok":"bad");
+        status(sid,r.plz&&r.strasse?"Anschrift gelesen. Bitte genau prüfen.":r.plz?"Nur PLZ und Ort erkannt. Straße bitte von Hand eintragen oder nochmal fotografieren.":"Anschrift nicht erkannt. Nochmal fotografieren oder von Hand eintragen.",r.plz&&r.strasse?"ok":"bad");
+        lastMrz=mrzName(t);if(lastMrz)return null;
         return w1.terminate().then(function(){w1=null;return bild(file,{untenAnteil:0.4,minBreite:1800,max:2600})}).then(function(c2){
-          return worker("eng",{tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",preserve_interword_spaces:"0"}).then(function(w){w1=w;return lesen(w,c2)})}).then(function(t2){
-          var m=mrzName(t2),e=$("s-mrz"),nn=$("s-nachname").value;
-          if(!m){e.textContent="Maschinenzeile nicht gelesen (kein Problem, nur zur Gegenprüfung).";e.className="sstat";return}
-          if(nn){var a=ersetzeUmlaute(nn),b=m.nachname.replace(/\s/g,"");
-            if(a&&b&&(a===b||b.indexOf(a)===0||a.indexOf(b)===0)){e.textContent="Name stimmt mit der Maschinenzeile überein.";e.className="sstat ok"}
-            else{e.textContent="Achtung: Maschinenzeile liest „"+tc(m.nachname)+"“, oben steht „"+nn+"“. Bitte prüfen.";e.className="sstat bad"}}
-          else{$("s-nachname").value=tc(m.nachname);if(!$("s-vorname").value)$("s-vorname").value=tc(m.vorname);e.textContent="Name aus der Maschinenzeile übernommen (Umlaute nicht lesbar, bitte prüfen).";e.className="sstat bad"}})});
+          return worker("eng",{tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",preserve_interword_spaces:"0"}).then(function(w){w1=w;return lesen(w,c2)})}).then(function(t2){lastMrz=mrzName(t2)})}).then(function(){pruefeMrz()});
       if(schritt==="bank")return bild(file).then(function(c){return worker("eng",{tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "}).then(function(w){w1=w;return lesen(w,c)})}).then(function(t){
         var r=ibanSuche(t);if(r)return r;
         return bild(file,{invert:true}).then(function(c2){return lesen(w1,c2)}).then(ibanSuche)}).then(function(r){
@@ -911,6 +921,12 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
         else status(sid,"Keine gültige IBAN erkannt. Nochmal fotografieren (Karte flach, kein Glanz) oder von Hand eintragen.","bad")})
     }).catch(function(e){status(sid,"Fehler: "+(e&&e.message?e.message:e),"bad")}).then(function(){
       return w1?w1.terminate().catch(function(){}):null}).then(function(){busy=false;document.querySelectorAll("#scan .sbtns .btn").forEach(function(b){b.disabled=false})})}
+  var lastMrz=null;
+  function pruefeMrz(){var e=$("s-mrz"),m=lastMrz;if(!m)return;var nn=$("s-nachname").value.trim();
+    if(nn){var a=ersetzeUmlaute(nn),b=m.nachname.replace(/\s/g,"");
+      if(a&&b&&(a===b||b.indexOf(a)===0||a.indexOf(b)===0)){e.textContent="Name stimmt mit der Maschinenzeile überein.";e.className="sstat ok"}
+      else{e.textContent="Achtung: Maschinenzeile liest „"+tc(m.nachname)+"“, oben steht „"+nn+"“. Bitte prüfen.";e.className="sstat bad"}}
+    else{$("s-nachname").value=tc(m.nachname);if(!$("s-vorname").value.trim())$("s-vorname").value=tc(m.vorname);e.textContent="Name aus der Maschinenzeile übernommen (Umlaute fehlen dort, bitte prüfen).";e.className="sstat bad"}}
   function ibanPruef(){var v=$("s-iban").value.replace(/\s/g,"").toUpperCase(),e=$("s-ibanstate");
     if(!v){e.textContent="";return}
     if(ZulassungGen.ibanOk(v)){e.textContent="IBAN ist gültig (Prüfziffer).";e.className="sstat ok"}else{e.textContent="IBAN ungültig, bitte korrigieren.";e.className="sstat bad"}}
