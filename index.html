@@ -149,7 +149,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
       <label>eVB-Nummer (7 Zeichen)<input id="evb" class="mono" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
     </div>
     <label class="check" id="elektrozeile"><input id="elektro" type="checkbox"> E-Kennzeichen (Elektrofahrzeug)</label>
-    <p class="hint" id="elektrohint">Wird automatisch angehakt, wenn das Kennzeichen auf E endet. Die Umweltplakette wird immer mit „ja“ angekreuzt, wo das Formular sie abfragt.</p>
+    <p class="hint" id="elektrohint">Wird automatisch angehakt, wenn das Kennzeichen auf E endet. Die Umweltplakette wird mit „ja“ angekreuzt, wo das Formular sie abfragt – bei E-Kennzeichen nicht (keine Feinstaubplakette mehr nötig).</p>
   </div>
 </section>
 
@@ -328,7 +328,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     setText(form, 'Postleitzahl Ort', clean(plzOrt(h.plz, h.ort)), 11);
     setText(form, fieldBy(form, 'AntragVollmacht für die Zulassung'), clean(d.fahrzeug.evb).toUpperCase(), 11);
     // Umweltplakette JA/NEIN: Auswahlfeld ist in der Vorlage unsauber gebaut -> Feld entfernen, X auf das Kästchen setzen
-    doc.getPage(0).drawText('X', { x: 211 + 3.6, y: 788.6, size: 10, font: font, color: PDFLib.rgb(0, 0, 0) });
+    if (!d.elektro) doc.getPage(0).drawText('X', { x: 211 + 3.6, y: 788.6, size: 10, font: font, color: PDFLib.rgb(0, 0, 0) });   // E-Kennzeichen: keine Plakette
     var ds = d.heute.replace(/\D/g, ''), six = ds.slice(0, 4) + ds.slice(6, 8);
     for (var i = 0; i < 6; i++) {
       var ch = six.charAt(i), w = font.widthOfTextAtSize(ch, 11);
@@ -367,7 +367,8 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
       CUR.page.drawText('Kennzeichen: ' + kz, { x: rb.x + 3, y: rb.y + rb.height - 13, size: 10, font: font, color: PDFLib.rgb(0, 0, 0) });
     }
     setText(form, 'Datum_1', d.heute, 10);
-    tick(form, 'Ausgabe Umweltplakette (kostenpflichtig)', 0); tick(form, 'Neuzulassung/Umschreibung', 0);                // immer "ja"
+    if (!d.elektro) tick(form, 'Ausgabe Umweltplakette (kostenpflichtig)', 0);                                             // E-Kennzeichen: keine Plakette
+    tick(form, 'Neuzulassung/Umschreibung', 0);
     if (d.elektro) tick(form, 'E (Elektrofahrzeug)', 0);
     dropForm(PDFLib, doc);
     return doc;
@@ -413,7 +414,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     putAt(page, font, kz, 50, 146, 235, 12);
     putAt(page, font, clean(v.evb).toUpperCase(), 312, 146, 245, 12);
     kreuz(45.3, 77.9, 57.9, 89.0); // Neuzulassung / Umschreibung: immer
-    kreuz(178.1, 161.2, 190.8, 172.6); // Feinstaubplakette: Ja
+    if (!d.elektro) kreuz(178.1, 161.2, 190.8, 172.6); // Feinstaubplakette: Ja (nicht bei E-Kennzeichen)
     if (d.elektro) kreuz(424.9, 161.5, 437.6, 172.9); // E-Kennzeichen: Ja
     putAt(page, font, clean(nameVollmacht(h)), 77, 215, 138, 10);
     putAt(page, font, clean(h.strasse), 77, 244, 138, 10);
