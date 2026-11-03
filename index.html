@@ -413,13 +413,14 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     var kz = clean(v.kennzeichen).toUpperCase();
     putAt(page, font, kz, 50, 146, 235, 12);
     putAt(page, font, clean(v.evb).toUpperCase(), 312, 146, 245, 12);
+    kreuz(45.3, 77.9, 57.9, 89.0); // Neuzulassung / Umschreibung: immer
     kreuz(178.1, 161.2, 190.8, 172.6); // Feinstaubplakette: Ja
     if (d.elektro) kreuz(424.9, 161.5, 437.6, 172.9); // E-Kennzeichen: Ja
     putAt(page, font, clean(nameVollmacht(h)), 77, 215, 138, 10);
     putAt(page, font, clean(h.strasse), 77, 244, 138, 10);
     putAt(page, font, clean(plzOrt(h.plz, h.ort)), 77, 272, 138, 10);
-    var f = [[v.hersteller, v.modell].filter(Boolean).join(' '), v.fin ? 'FIN ' + v.fin.toUpperCase() : '', kz ? 'Kennzeichen ' + kz : ''].filter(Boolean).join(', ');
-    putAt(page, font, clean(f), 78, 337, 480, 9);
+    var f = [[v.hersteller, v.modell].filter(Boolean).join(' '), v.fin ? v.fin.toUpperCase() : ''].filter(Boolean).join(', ');
+    putAt(page, font, clean(f), 78, 337, 138, 9);
     putAt(page, font, clean(d.ort + ', ' + d.heute), 100, 641, 250, 11);
     return doc;
   }
