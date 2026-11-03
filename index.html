@@ -148,7 +148,6 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
       <label>Kennzeichen oder Wunschkennzeichen<input id="kennzeichen" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
       <label>eVB-Nummer (7 Zeichen)<input id="evb" class="mono" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
     </div>
-    <label>Datum der Zulassung (Standard: heute)<input id="zdatum" type="date"></label>
     <label class="check" id="elektrozeile"><input id="elektro" type="checkbox"> E-Kennzeichen (Elektrofahrzeug)</label>
     <p class="hint" id="elektrohint">Wird automatisch angehakt, wenn das Kennzeichen auf E endet. Die Umweltplakette wird immer mit „ja“ angekreuzt, wo das Formular sie abfragt.</p>
   </div>
@@ -503,7 +502,6 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     comb(d.fahrzeug.kennzeichen, X0, 10, 589);                          // S25
     plain(d.ort, 96, 531, 150);                                         // S13 Ort der Unterschrift
     comb(d.heute.replace(/\D/g, ''), 263.9, 8, 531);                  // S13 Datum der Unterschrift
-    comb(String(d.zulassungsdatum || d.heute).replace(/\D/g, ''), 263.9, 8, 589); // S26 TTMMJJJJ
     return doc;
   }
 
@@ -574,7 +572,6 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
   function p2(n){return(n<10?"0":"")+n}
   function heuteISO(){var t=new Date();return t.getFullYear()+"-"+p2(t.getMonth()+1)+"-"+p2(t.getDate())}
   function heuteDE(){var t=new Date();return p2(t.getDate())+"."+p2(t.getMonth()+1)+"."+t.getFullYear()}
-  $("zdatum").value=heuteISO();
   var firma=false, stelle=null, urls=[];
 
   function setArt(f){firma=f;$("art-privat").setAttribute("aria-pressed",!f);$("art-firma").setAttribute("aria-pressed",f);
@@ -632,7 +629,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
   function laden(v){
     document.querySelectorAll("input").forEach(function(i){if(!i.id||i.type==="checkbox"||i.id==="zdatum")return;i.value=(v.vals&&v.vals[i.id])||""});
     $("gleich").checked=!!v.gleich;$("inhaberbox").hidden=!!v.gleich;$("elektro").checked=!!v.elektro;setArt(!!v.firma);
-    if(v.stelle)setStelle(v.stelle,false);$("zdatum").value=heuteISO();$("iban").dispatchEvent(new Event("input"));empfHinweis();
+    if(v.stelle)setStelle(v.stelle,false);$("iban").dispatchEvent(new Event("input"));empfHinweis();
     urls.forEach(URL.revokeObjectURL);urls=[];$("dateien").innerHTML="";$("ergebnis").hidden=true;fehler([]);window.scrollTo({top:0,behavior:"smooth"});if(location.hash==="#vorgaenge")location.hash=""}
   function vor(ts){var n=Math.floor((Date.now()-ts)/864e5);return n<1?"heute":n===1?"gestern":"vor "+n+" Tagen"}
   function verlauf(){
@@ -665,7 +662,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
       fahrzeug:{hersteller:val("hersteller"),modell:val("modell"),fin:val("fin"),kennzeichen:val("kennzeichen"),evb:val("evb")},
       bank:{inhaberGleich:gleich,inhaber:gleich?null:{name:val("in-name"),strasse:val("in-strasse"),plz:val("in-plz"),ort:val("in-ort")},
         iban:val("iban").replace(/\s/g,""),bic:val("bic"),bank:val("bank")},
-      zulassungsdatum:$("zdatum").value?$("zdatum").value.split("-").reverse().join(""):"",
+      zulassungsdatum:"",
       heute:heuteDE(),
       umweltplakette:true,
       elektro:$("elektro").checked
@@ -760,7 +757,7 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     document.querySelectorAll("input").forEach(function(i){if(i.type==="checkbox")i.checked=(i.id==="gleich");else i.value=""});
     $("inhaberbox").hidden=true;$("ibanstate").textContent="";setArt(false);stelle=null;
     document.querySelectorAll("[data-st]").forEach(function(b){b.setAttribute("aria-pressed","false")});
-    $("zdatum").value=heuteISO();updBeruf();$("sthint").textContent="Wird aus der PLZ des Halters vorgeschlagen. Du kannst sie hier jederzeit ändern.";
+    updBeruf();$("sthint").textContent="Wird aus der PLZ des Halters vorgeschlagen. Du kannst sie hier jederzeit ändern.";
     urls.forEach(URL.revokeObjectURL);urls=[];$("dateien").innerHTML="";$("ergebnis").hidden=true;fehler([]);window.scrollTo({top:0,behavior:"smooth"});
   };
 })();
