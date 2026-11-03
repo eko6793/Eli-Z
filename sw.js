@@ -1,5 +1,5 @@
 // Eli-Z: Seite nach dem ersten Aufruf offline verfügbar machen
-const C = "eliz-11";
+const C = "eliz-12";
 const OCR = "eliz-ocr-1";
 const DATEIEN = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 const OCR_DATEIEN = ["ocr/tesseract.min.js", "ocr/worker.min.js", "ocr/tesseract-core-simd.wasm.js", "ocr/tesseract-core.wasm.js", "ocr/deu.traineddata", "ocr/eng.traineddata"];
