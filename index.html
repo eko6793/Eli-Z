@@ -69,11 +69,18 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
 #fehler{border:1px solid var(--err);border-radius:10px;padding:12px 14px;color:var(--err);background:var(--surface)}
 #fehler ul{margin:6px 0 0;padding-left:20px}
 .out{display:grid;gap:10px}
-.file{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.file{display:grid;grid-template-columns:1fr;gap:8px 12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .file:first-child{border-top:0;padding-top:0}
 .file b{display:block;font-weight:600;overflow-wrap:anywhere}
 .file span{font-size:13px;color:var(--muted)}
-.file .acts{display:flex;gap:8px}
+.file .acts{display:flex;flex-wrap:wrap;gap:8px}
+#druckbox{display:none}
+@media print{@page{size:A4;margin:0}
+ html,body.druckt{background:#fff!important;margin:0!important;padding:0!important;min-height:0!important;height:auto!important}
+ body.druckt>*:not(#druckbox){display:none!important}
+ body.druckt #druckbox{display:block!important}
+ #druckbox canvas{display:block;width:210mm;height:296mm;break-after:page;page-break-after:always}
+ #druckbox canvas:last-child{break-after:auto;page-break-after:auto}}
 #vorschau{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;-webkit-overflow-scrolling:touch}
 #vorschau .vbar{position:sticky;top:0;z-index:2;display:flex;gap:12px;align-items:center;background:var(--surface);border-bottom:1px solid var(--line);
   padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px))}
@@ -228,7 +235,8 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
 </div>
 </div>
 
-<div id="vorschau" hidden role="dialog" aria-modal="true" aria-label="Vorschau"><div class="vbar"><button class="btn small" id="vzu" type="button">Schließen</button><b id="vtitel"></b></div><div id="vseiten"></div></div>
+<div id="druckbox" aria-hidden="true"></div>
+<div id="vorschau" hidden role="dialog" aria-modal="true" aria-label="Vorschau"><div class="vbar"><button class="btn small" id="vzu" type="button">Schließen</button><b id="vtitel"></b><button class="btn small ghost" id="vdruck" type="button">Drucken</button><button class="btn small" id="vdl" type="button">Download</button></div><div id="vseiten"></div></div>
 
 <div class="bar" id="leiste"><div class="in">
   <button class="btn ghost small" id="neu" type="button">Neuer Vorgang</button>
@@ -731,7 +739,37 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     return pdfjsP}
   function vzu(){$("vorschau").hidden=true;$("vseiten").innerHTML="";document.body.style.overflow=""}
   $("vzu").onclick=vzu;document.addEventListener("keydown",function(e){if(e.key==="Escape"&&!$("vorschau").hidden)vzu()});
+  var aktuell=null;
+  function herunterladen(u8,name){
+    var url=URL.createObjectURL(new Blob([u8],{type:"application/pdf"}));
+    var l=document.createElement("a");l.href=url;l.download=name;l.rel="noopener";document.body.appendChild(l);l.click();l.remove();
+    setTimeout(function(){URL.revokeObjectURL(url)},60000)}
+  function teilen(u8,name){
+    var file=new File([u8],name,{type:"application/pdf"});
+    return navigator.share({files:[file],title:name}).catch(function(){})}
+  function kannTeilen(){try{return !!(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],"a.pdf",{type:"application/pdf"})]}))}catch(e){return false}}
+  async function drucken(u8,name,knopf){
+    var alt=knopf?knopf.textContent:"";if(knopf){knopf.disabled=true;knopf.textContent="Bereite vor …"}
+    var box=$("druckbox");box.innerHTML="";
+    try{
+      var lib=await loadPdfjs(),pdf=await lib.getDocument({data:u8.slice()}).promise;
+      for(var i=1;i<=pdf.numPages;i++){
+        var pg=await pdf.getPage(i),v1=pg.getViewport({scale:1}),sc=Math.min(2.8,3400/Math.max(v1.width,v1.height)),vp=pg.getViewport({scale:sc});
+        var c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+        box.appendChild(c);await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise}
+      var vorher=document.title;document.title=name.replace(/\.pdf$/i,"");
+      var ende=function(){window.removeEventListener("afterprint",ende);document.body.classList.remove("druckt");document.title=vorher;box.innerHTML=""};
+      window.addEventListener("afterprint",ende);
+      document.body.classList.add("druckt");
+      window.print();
+    }catch(e){document.body.classList.remove("druckt");box.innerHTML="";
+      fehler(["Drucken klappt auf diesem Gerät nicht direkt. Tippe auf „Download“ oder „Teilen“ und drucke die Datei aus dem PDF-Programm."])}
+    if(knopf){knopf.disabled=false;knopf.textContent=alt}
+  }
+  $("vdruck").onclick=function(){if(aktuell)drucken(aktuell.u8,aktuell.name,this)};
+  $("vdl").onclick=function(){if(aktuell)herunterladen(aktuell.u8,aktuell.name)};
   async function vorschau(u8,name){
+    aktuell={u8:u8,name:name};
     var box=$("vseiten");box.innerHTML='<p class="hint">Vorschau wird geladen …</p>';$("vtitel").textContent=name;
     $("vorschau").hidden=false;document.body.style.overflow="hidden";$("vorschau").scrollTop=0;
     try{
@@ -751,13 +789,13 @@ input.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-sp
     d.querySelector("b").textContent=name;d.querySelector("span").textContent=sub;
     var a=d.querySelector(".acts");
     var ans=document.createElement("button");ans.type="button";ans.className="btn ghost small";ans.textContent="Vorschau";ans.onclick=function(){vorschau(u8,name)};
-    var sp=document.createElement("button");sp.className="btn small";sp.type="button";sp.textContent="Speichern";
-    sp.onclick=function(){
-      var file=new File([blob],name,{type:"application/pdf"});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:name}).catch(function(){})}
-      else{var l=document.createElement("a");l.href=url;l.download=name;document.body.appendChild(l);l.click();l.remove()}
-    };
-    a.appendChild(ans);a.appendChild(sp);return d;
+    var dr=document.createElement("button");dr.className="btn small";dr.type="button";dr.textContent="Drucken";
+    dr.onclick=function(){drucken(u8,name,dr)};
+    var dl=document.createElement("button");dl.className="btn small";dl.type="button";dl.textContent="Download";
+    dl.onclick=function(){herunterladen(u8,name)};
+    a.appendChild(dr);a.appendChild(dl);a.appendChild(ans);
+    if(kannTeilen()){var sh=document.createElement("button");sh.className="btn ghost small";sh.type="button";sh.textContent="Teilen";sh.onclick=function(){teilen(u8,name)};a.appendChild(sh)}
+    return d;
   }
   $("los").onclick=async function(){
     var d=collect(),f=pruefen(d);fehler(f);if(f.length)return;
